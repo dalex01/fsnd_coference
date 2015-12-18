@@ -25,6 +25,7 @@ from protorpc import remote
 
 from google.appengine.api import urlfetch
 from google.appengine.api import memcache
+from google.appengine.api import taskqueue
 from google.appengine.ext import ndb
 
 from models import Profile
@@ -155,6 +156,10 @@ class ConferenceApi(remote.Service):
 
         # create Conference & return (modified) ConferenceForm
         Conference(**data).put()
+        taskqueue.add(params={'email': user.email(),
+            'conferenceInfo': repr(request)},
+            url='/tasks/send_confirmation_email'
+        )
 
         return request
 
