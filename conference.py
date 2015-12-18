@@ -32,6 +32,9 @@ from models import ProfileForm
 from models import TeeShirtSize
 from models import Conference
 from models import ConferenceForm
+from models import ConferenceForms
+from models import ConferenceQueryForm
+from models import ConferenceQueryForms
 
 from settings import WEB_CLIENT_ID
 from utils import getUserId
@@ -127,12 +130,28 @@ class ConferenceApi(remote.Service):
         return request
 
 
-    @endpoints.method(ConferenceForm, ConferenceForm, path='conference',
-            http_method='POST', name='createConference')
+    @endpoints.method(ConferenceForm, ConferenceForm,
+                path='conference',
+                http_method='POST',
+                name='createConference')
     def createConference(self, request):
         """Create new conference."""
         return self._createConferenceObject(request)
 
+
+    @endpoints.method(ConferenceQueryForms, ConferenceForms,
+                path='queryConferences',
+                http_method='POST',
+                name='queryConferences')
+    def queryConferences(self, request):
+        """Query for conferences."""
+        conferences = Conference.query()
+
+         # return individual ConferenceForm object per Conference
+        return ConferenceForms(
+            items=[self._copyConferenceToForm(conf, "") \
+            for conf in conferences]
+        )
 
 # - - - Profile objects - - - - - - - - - - - - - - - - - - -
 
@@ -190,14 +209,18 @@ class ConferenceApi(remote.Service):
 
 
     @endpoints.method(message_types.VoidMessage, ProfileForm,
-            path='profile', http_method='GET', name='getProfile')
+                path='profile',
+                http_method='GET',
+                name='getProfile')
     def getProfile(self, request):
         """Return user profile."""
         return self._doProfile()
 
 
     @endpoints.method(ProfileMiniForm, ProfileForm,
-            path='profile', http_method='POST', name='saveProfile')
+                path='profile',
+                http_method='POST',
+                name='saveProfile')
     def saveProfile(self, request):
         """Update & return user profile."""
         return self._doProfile(request)
