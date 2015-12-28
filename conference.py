@@ -35,6 +35,9 @@ from models import TeeShirtSize
 from models import Conference
 from models import ConferenceForm
 from models import ConferenceForms
+from models import Session
+from models import SessionForm
+from models import SessionForms
 from models import ConferenceQueryForm
 from models import ConferenceQueryForms
 from models import BooleanMessage
@@ -220,7 +223,7 @@ class ConferenceApi(remote.Service):
         return self._updateConferenceObject(request)
 
 
-    @endpoints.method(CONF_GET_REQUEST, ConferenceForm,
+    @endpoints.method(CONF_GET_REQUEST, SessionForm,
             path='conference/{websafeConferenceKey}',
             http_method='GET', name='getConference')
     def getConference(self, request):
@@ -233,6 +236,37 @@ class ConferenceApi(remote.Service):
         prof = conf.key.parent().get()
         # return ConferenceForm
         return self._copyConferenceToForm(conf, getattr(prof, 'displayName'))
+
+
+    def _copySessionToForm(self, sess):
+        """Copy relevant fields from Session to SessionForm."""
+        sf = SessionForm()
+        for field in sf.all_fields():
+            if hasattr(sess, field.name):
+                # convert Date/Time to date/time string; just copy others
+                if field.name == "date" or field.name == "startTime":
+                    setattr(sf, field.name, str(getattr(sess, field.name)))
+                else:
+                    setattr(sf, field.name, sess.name)
+            elif field.name == "websafeConferenceKey":
+                setattr(sf, field.name, sess.websafeConferenceKey.urlsafe())
+
+        sf.check_initialized()
+        return sf
+
+    @endpoints.method(CONF_GET_REQUEST, SessionForms,
+            path='conference/{websafeConferenceKey}/session',
+            http_method='GET', name='getConferenceSessions')
+    def getConferenceSessions(self, request):
+        """Given a conference (by websafeConferenceKey), return all sessions."""
+        # get Conference object from request; bail if not found
+        confKey = ndb.Key(urlsafe=request.websafeConferenceKey)
+        if not confKey:
+            raise endpoints.NotFoundException('No conference found with key: %s' % request.websafeConferenceKey)
+        sessions = Session.query(ancestor=confKey).fetch()
+
+        return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
+
 
     @endpoints.method(message_types.VoidMessage, ConferenceForms,
                 path='getConferencesCreated',
@@ -255,6 +289,10 @@ class ConferenceApi(remote.Service):
         return ConferenceForms(
             items=[self._copyConferenceToForm(conf, displayName) for conf in conferences]
         )
+
+
+
+
 
     @endpoints.method(message_types.VoidMessage, ConferenceForms,
                 path='filterPlayground',
