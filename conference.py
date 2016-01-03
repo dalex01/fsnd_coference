@@ -80,6 +80,10 @@ CONF_GET_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
     websafeConferenceKey=messages.StringField(1),
 )
+SESSION_GET_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+    sessionKey=messages.StringField(1),
+)
 SESSION_TYPE_GET_REQUEST = endpoints.ResourceContainer(
     sessionType=messages.StringField(1),
     websafeConferenceKey=messages.StringField(2),
@@ -305,11 +309,6 @@ class ConferenceApi(remote.Service):
         q = q.filter(Conference.topics == "Medical Innovations")
         q = q.order(Conference.name)
         q = q.filter(Conference.month == 12)
-
-        # TODO
-        # add 2 filters:
-        # 1: city equals to London
-        # 2: topic equals "Medical Innovations"
 
         return ConferenceForms(
             items=[self._copyConferenceToForm(conf, "") for conf in q]
@@ -578,8 +577,6 @@ class ConferenceApi(remote.Service):
             http_method='GET', name='getAnnouncement')
     def getAnnouncement(self, request):
         """Return Announcement from memcache."""
-        # TODO 1
-        # return an existing announcement from Memcache or an empty string.
         announcement = memcache.get(MEMCACHE_ANNOUNCEMENTS_KEY)
         if not announcement:
             announcement = ""
@@ -703,6 +700,79 @@ class ConferenceApi(remote.Service):
     def createSession(self, request):
         """ Create a new Session"""
         return self._createSessionObject(request)
+
+    ######################################
+    # Wishlist
+    ######################################
+
+    def _addToWishlist(self, request, add=True):
+        """Add or delete session to user wishlist."""
+        retval = None
+        prof = self._getProfileFromUser() # get user Profile
+
+        # check if session exists given sessionKey
+        # get sessions; check that it exists
+        wsck = request.sessionKey
+        sess = ndb.Key(urlsafe=wsck).get()
+        if not sess:
+            raise endpoints.NotFoundException(
+                'No session found with key: %s' % wsck)
+
+        # add
+        if add:
+            # check if user already added otherwise add
+            if wsck in prof.conferenceKeysToAttend:
+                raise ConflictException(
+                    "You have already added this session to wishlist")
+
+            # add session
+            prof.sessionsWishlist.append(wsck)
+            retval = True
+
+        # delete
+        else:
+            # check if session in users wishlist
+            if wsck in prof.sessionsWishlist:
+
+                # delete session from wishlist
+                prof.sessionsWishlist.remove(wsck)
+                retval = True
+            else:
+                retval = False
+
+        # write things back to the datastore & return
+        prof.put()
+        sess.put()
+        return BooleanMessage(data=retval)
+
+
+    @endpoints.method(message_types.VoidMessage, SessionForms,
+            path='sessions/addtowishlist',
+            http_method='GET', name='getSessionsInWishlist')
+    def getSessionsInWishlist(self, request):
+        """Get list of sessions that user has added to wishlist."""
+        prof = self._getProfileFromUser() # get user Profile
+        sess_keys = [ndb.Key(urlsafe=wsck) for wsck in prof.sessionsWishlist]
+        sessions = ndb.get_multi(sess_keys)
+
+        # return set of ConferenceForm objects per Conference
+        return SessionForms(items=[self._copySessionToForm(sess) for sess in sessions]
+        )
+
+    @endpoints.method(SESSION_GET_REQUEST, BooleanMessage,
+            path='sessions/{sessionKey}',
+            http_method='POST', name='addSessionToWishlist')
+    def addSessionToWishlist(self, request):
+        """Add session to users wishlist."""
+        return self._addToWishlist(request)
+
+
+    @endpoints.method(SESSION_GET_REQUEST, BooleanMessage,
+            path='sessions/{sessionKey}',
+            http_method='DELETE', name='deleteSessionInWishlist')
+    def deleteSessionInWishlist(self, request):
+        """Delete session from users wishlist."""
+        return self._addToWishlist(request, add=False)
 
 # registers API
 api = endpoints.api_server([ConferenceApi])
