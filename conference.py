@@ -628,8 +628,9 @@ class ConferenceApi(remote.Service):
         confKey = ndb.Key(urlsafe=request.websafeConferenceKey).get()
         if not confKey:
             raise endpoints.NotFoundException('No conference found with key: %s' % request.websafeConferenceKey)
-        sessions = Session.query(ancestor=confKey)
-        sessions = Session.filter(Session.typeOfSession == request.sessionType)
+        conf_key = ndb.Key(urlsafe=request.websafeConferenceKey)
+        sessions = Session.query(ancestor=conf_key)
+        sessions = sessions.filter(Session.typeOfSession == request.sessionType)
 
         return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
 
