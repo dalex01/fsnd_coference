@@ -597,7 +597,7 @@ class ConferenceApi(remote.Service):
                 else:
                     setattr(sf, field.name, getattr(sess, field.name))
             elif field.name == "websafeConferenceKey":
-                setattr(sf, field.name, sess.websafeConferenceKey.urlsafe())
+                setattr(sf, field.name, sess.key.urlsafe())
 
         sf.check_initialized()
         return sf
@@ -609,11 +609,12 @@ class ConferenceApi(remote.Service):
     def getConferenceSessions(self, request):
         """Given a conference (by websafeConferenceKey), return all sessions."""
         # get Conference object from request; bail if not found
-        confKey = ndb.Key(urlsafe=request.websafeConferenceKey).get()
-        if not confKey:
+        conf = ndb.Key(urlsafe=request.websafeConferenceKey).get()
+        if not conf:
             raise endpoints.NotFoundException(
                 'No conference found with key: %s' % request.websafeConferenceKey)
-        sessions = Session.query(ancestor=confKey).fetch()
+        conf_key = ndb.Key(urlsafe=request.websafeConferenceKey)
+        sessions = Session.query(ancestor=conf_key).fetch()
 
         return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
 
