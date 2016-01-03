@@ -16,6 +16,7 @@ import httplib
 import endpoints
 from protorpc import messages
 from google.appengine.ext import ndb
+from google.appengine.ext.db import polymodel
 
 
 class Profile(ndb.Model):
@@ -90,10 +91,10 @@ class ConferenceForms(messages.Message):
     """ConferenceForms -- multiple Conference outbound form message"""
     items = messages.MessageField(ConferenceForm, 1, repeated=True)
 
-class Session(Conference):
+class Session(ndb.Model):
     """Session -- session object"""
     sessionName     = ndb.StringProperty(required=True)
-    highlights      = ndb.BooleanProperty()
+    highlights      = ndb.StringProperty()
     speaker         = ndb.StringProperty()
     duration        = ndb.IntegerProperty()
     typeOfSession   = ndb.StringProperty()
@@ -103,13 +104,14 @@ class Session(Conference):
 
 class SessionForm(messages.Message):
     """SessionForm -- update Session form message"""
-    sessionName     = messages.StringField(1)
-    highlights      = messages.StringField(2)
-    speaker         = messages.StringField(3)
-    duration        = messages.IntegerField(4)
-    typeOfSession   = messages.StringField(5)
-    date            = messages.StringField(6)
-    startTime       = messages.StringField(7)
+    sessionName             = messages.StringField(1)
+    highlights              = messages.StringField(2)
+    speaker                 = messages.StringField(3)
+    duration                = messages.IntegerField(4)
+    typeOfSession           = messages.StringField(5)
+    date                    = messages.StringField(6)
+    startTime               = messages.StringField(7)
+    websafeConferenceKey    = messages.StringField(8)
 
 class SessionForms(messages.Message):
     """SessionForms -- multiple Session outbound form message"""
