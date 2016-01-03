@@ -84,6 +84,9 @@ SESSION_TYPE_GET_REQUEST = endpoints.ResourceContainer(
     sessionType=messages.StringField(1),
     websafeConferenceKey=messages.StringField(2),
 )
+SESSION_SPEAKER_GET_REQUEST = endpoints.ResourceContainer(
+    speaker=messages.StringField(1),
+)
 CONF_POST_REQUEST = endpoints.ResourceContainer(
     ConferenceForm,
     websafeConferenceKey=messages.StringField(1),
@@ -631,6 +634,17 @@ class ConferenceApi(remote.Service):
         conf_key = ndb.Key(urlsafe=request.websafeConferenceKey)
         sessions = Session.query(ancestor=conf_key)
         sessions = sessions.filter(Session.typeOfSession == request.sessionType)
+
+        return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
+
+    @endpoints.method(SESSION_SPEAKER_GET_REQUEST, SessionForms,
+            path='conference/sessions/{speaker}',
+            http_method='GET', name='getConferenceSessionsBySpeaker')
+    def getConferenceSessionsBySpeaker(self, request):
+        """Given a conference (by websafeConferenceKey), return all sessions."""
+        # get Conference object from request; bail if not found
+        sessions = Session.query()
+        sessions = sessions.filter(Session.speaker == request.speaker)
 
         return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
 
