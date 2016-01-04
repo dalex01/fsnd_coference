@@ -13,7 +13,7 @@ created by wesc on 2014 apr 21
 __author__ = 'wesc+api@google.com (Wesley Chun)'
 
 
-from datetime import datetime
+import datetime
 import json
 import os
 import time
@@ -156,12 +156,12 @@ class ConferenceApi(remote.Service):
 
         # convert dates from strings to Date objects; set month based on start_date
         if data['startDate']:
-            data['startDate'] = datetime.strptime(data['startDate'][:10], "%Y-%m-%d").date()
+            data['startDate'] = datetime.datetime.strptime(data['startDate'][:10], "%Y-%m-%d").date()
             data['month'] = data['startDate'].month
         else:
             data['month'] = 0
         if data['endDate']:
-            data['endDate'] = datetime.strptime(data['endDate'][:10], "%Y-%m-%d").date()
+            data['endDate'] = datetime.datetime.strptime(data['endDate'][:10], "%Y-%m-%d").date()
 
         # set seatsAvailable to be same as maxAttendees on creation
         # both for data model & outbound Message
@@ -217,7 +217,7 @@ class ConferenceApi(remote.Service):
             if data not in (None, []):
                 # special handling for dates (convert string to Date)
                 if field.name in ('startDate', 'endDate'):
-                    data = datetime.strptime(data, "%Y-%m-%d").date()
+                    data = datetime.datetime.strptime(data, "%Y-%m-%d").date()
                     if field.name == 'startDate':
                         conf.month = data.month
                 # write to Conference object
@@ -623,7 +623,7 @@ class ConferenceApi(remote.Service):
             path='conference/{websafeConferenceKey}/session/{sessionType}',
             http_method='GET', name='getConferenceSessionsByType')
     def getConferenceSessionsByType(self, request):
-        """Given a conference (by websafeConferenceKey), return all sessions."""
+        """Given a conference (by websafeConferenceKey) and session type, return all sessions."""
         # get Conference object from request; bail if not found
         confKey = ndb.Key(urlsafe=request.websafeConferenceKey).get()
         if not confKey:
@@ -638,7 +638,7 @@ class ConferenceApi(remote.Service):
             path='conference/sessions/{speaker}',
             http_method='GET', name='getConferenceSessionsBySpeaker')
     def getConferenceSessionsBySpeaker(self, request):
-        """Given a conference (by websafeConferenceKey), return all sessions."""
+        """Given speaker, return all sessions."""
         # get Conference object from request; bail if not found
         sessions = Session.query()
         sessions = sessions.filter(Session.speaker == request.speaker)
@@ -676,10 +676,9 @@ class ConferenceApi(remote.Service):
 
         # convert dates from strings to Date objects; set month based on start_date
         if data['date']:
-            data['date'] = datetime.strptime(data['date'][:10], "%Y-%m-%d").date()
+            data['date'] = datetime.datetime.strptime(data['date'][:10], "%Y-%m-%d").date()
         if data['date']:
-            data['startTime'] = datetime.strptime(data['startTime'], '%H:%M:%S').time()
-
+            data['startTime'] = datetime.datetime.strptime(data['startTime'], '%H:%M:%S').time()
         del data['websafeConferenceKey']
 
         #conf_key = ndb.Key(Conference, request.websafeConferenceKey)
@@ -773,6 +772,52 @@ class ConferenceApi(remote.Service):
     def deleteSessionInWishlist(self, request):
         """Delete session from users wishlist."""
         return self._addToWishlist(request, add=False)
+
+    ######################################
+    # Queries and indexes
+    ######################################
+
+    @endpoints.method(message_types.VoidMessage, SessionForms,
+                path='sessions/long',
+                http_method='GET',
+                name='queryLongSessions')
+    def queryLongSessions(self, request):
+        """Query for sessions with duration more than 60."""
+        sessions = Session.query()
+        sessions = sessions.filter(Session.duration > 60)
+
+        return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
+
+    @endpoints.method(SESSION_GET_REQUEST, ConferenceForm,
+            path='conference',
+            http_method='GET',
+            name='getConferenceBySession')
+    def getConferenceBySession(self, request):
+        """Given a Session key, return appropriate Conference."""
+        # get Session object from request; bail if not found
+        sess = ndb.Key(urlsafe=request.sessionKey).get()
+        if not sess:
+            raise endpoints.NotFoundException(
+                'No session found with key: %s' % request.sessionKey)
+        conf = sess.key.parent().get()
+        prof = conf.key.parent().get()
+        # return ConferenceForm
+        return self._copyConferenceToForm(conf, getattr(prof, 'displayName'))
+
+    @endpoints.method(message_types.VoidMessage, SessionForms,
+                path='sessions/before7pmNotWorkshops',
+                http_method='GET',
+                name='queryBefore7pmNotWorkshops')
+    def queryBefore7pmNotWorkshops(self, request):
+        """Query for sessions with duration more than 60."""
+        sessions = Session.query()
+        sessions = sessions.order(Session.startTime)
+        #sessions = sessions.order(Session.typeOfSession)
+        sessions = sessions.filter(Session.typeOfSession.IN(['Lecture', 'Keynote']))
+        sessions = sessions.filter(Session.startTime < datetime.time(hour=19))
+
+        return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
+
 
 # registers API
 api = endpoints.api_server([ConferenceApi])
