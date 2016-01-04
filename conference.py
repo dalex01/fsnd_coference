@@ -53,6 +53,7 @@ from utils import getUserId
 EMAIL_SCOPE = endpoints.EMAIL_SCOPE
 API_EXPLORER_CLIENT_ID = endpoints.API_EXPLORER_CLIENT_ID
 MEMCACHE_ANNOUNCEMENTS_KEY = "RECENT_ANNOUNCEMENTS"
+MEMCACHE_SPEAKER_KEY = "FEATURED_SPEAKER"
 DEFAULTS = {
     "city": "Default City",
     "maxAttendees": 0,
@@ -598,7 +599,7 @@ class ConferenceApi(remote.Service):
         for field in sf.all_fields():
             if hasattr(sess, field.name):
                 # convert Date/Time to date/time string; just copy others
-                if field.name == "date" or field.name == "startTime":
+                if field.name == "date" or field.name == "startTime" or field.name == "speaker":
                     setattr(sf, field.name, str(getattr(sess, field.name)))
                 else:
                     setattr(sf, field.name, getattr(sess, field.name))
@@ -647,7 +648,7 @@ class ConferenceApi(remote.Service):
         """Given speaker, return all sessions."""
         # get Conference object from request; bail if not found
         sessions = Session.query()
-        sessions = sessions.filter(Session.speaker == request.speaker)
+        sessions = sessions.filter(Session.speaker == ndb.Key(urlsafe=request.speaker))
 
         return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
 
@@ -900,14 +901,14 @@ class ConferenceApi(remote.Service):
 
 
     @endpoints.method(message_types.VoidMessage, StringMessage,
-            path='conference/announcement/get',
-            http_method='GET', name='getAnnouncement')
-    def getAnnouncement(self, request):
+            path='sessions/featured_speakers',
+            http_method='GET', name='getFeaturedSpeaker')
+    def getFeaturedSpeaker(self, request):
         """Return Announcement from memcache."""
-        announcement = memcache.get(MEMCACHE_ANNOUNCEMENTS_KEY)
-        if not announcement:
-            announcement = ""
-        return StringMessage(data=announcement)
+        fspeaker = memcache.get(MEMCACHE_SPEAKER_KEY)
+        if not fspeaker:
+            fspeaker = ""
+        return StringMessage(data=fspeaker)
 
 # registers API
 api = endpoints.api_server([ConferenceApi])
