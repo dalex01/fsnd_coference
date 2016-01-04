@@ -44,6 +44,8 @@ from models import ConferenceQueryForms
 from models import BooleanMessage
 from models import ConflictException
 from models import StringMessage
+from models import Speaker
+from models import SpeakerForm
 
 from settings import WEB_CLIENT_ID
 from utils import getUserId
@@ -79,6 +81,10 @@ FIELDS =    {
 CONF_GET_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
     websafeConferenceKey=messages.StringField(1),
+)
+SPEAKER_GET_REQUEST = endpoints.ResourceContainer(
+    message_types.VoidMessage,
+    speakerKey=messages.StringField(1),
 )
 SESSION_GET_REQUEST = endpoints.ResourceContainer(
     message_types.VoidMessage,
@@ -818,6 +824,84 @@ class ConferenceApi(remote.Service):
 
         return SessionForms(items=[self._copySessionToForm(session) for session in sessions])
 
+    ######################################
+    # Speaker
+    ######################################
+
+    def _copySpeakerProfileToForm(self, speaker):
+        """Copy relevant fields from Speaker to SpeakerForm."""
+        # copy relevant fields from Speaker to SpeakerForm
+        sf = SpeakerForm()
+        for field in sf.all_fields():
+            if hasattr(speaker, field.name):
+                setattr(sf, field.name, getattr(speaker, field.name))
+        sf.check_initialized()
+        return sf
+
+    @endpoints.method(SPEAKER_GET_REQUEST, SpeakerForm,
+                path='speaker',
+                http_method='GET',
+                name='getSpeaker')
+    def getSpeaker(self, request):
+        """Return speaker profile by key."""
+        speaker = ndb.Key(urlsafe=request.speakerKey).get()
+        if not conf:
+            raise endpoints.NotFoundException(
+                'No speaker found with key: %s' % request.speakerKey)
+        return self._copySpeakerProfileToForm(speaker)
+
+    @endpoints.method(SpeakerForm, SpeakerForm,
+                path='speaker',
+                http_method='POST',
+                name='createSpeaker')
+    def createSpeaker(self, request):
+        """Create Speaker profile."""
+        speaker = {field.name: getattr(request, field.name) for field in request.all_fields()}
+        Speaker(**speaker).put()
+        return self._copySpeakerProfileToForm(speaker)
+
+
+
+    ######################################
+    # Featured Speaker
+    ######################################
+
+    @staticmethod
+    def _cacheAnnouncement():
+        """Create Announcement & assign to memcache; used by
+        memcache cron job & putAnnouncement().
+        """
+        confs = Conference.query(ndb.AND(
+            Conference.seatsAvailable <= 5,
+            Conference.seatsAvailable > 0)
+        ).fetch(projection=[Conference.name])
+
+        if confs:
+            # If there are almost sold out conferences,
+            # format announcement and set it in memcache
+            announcement = '%s %s' % (
+                'Last chance to attend! The following conferences '
+                'are nearly sold out:',
+                ', '.join(conf.name for conf in confs))
+            memcache.set(MEMCACHE_ANNOUNCEMENTS_KEY, announcement)
+        else:
+            # If there are no sold out conferences,
+            # delete the memcache announcements entry
+            announcement = ""
+            memcache.delete(MEMCACHE_ANNOUNCEMENTS_KEY)
+
+        return announcement
+
+
+    @endpoints.method(message_types.VoidMessage, StringMessage,
+            path='conference/announcement/get',
+            http_method='GET', name='getAnnouncement')
+    def getAnnouncement(self, request):
+        """Return Announcement from memcache."""
+        announcement = memcache.get(MEMCACHE_ANNOUNCEMENTS_KEY)
+        if not announcement:
+            announcement = ""
+        return StringMessage(data=announcement)
 
 # registers API
 api = endpoints.api_server([ConferenceApi])
