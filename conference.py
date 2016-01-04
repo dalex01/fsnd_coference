@@ -664,6 +664,11 @@ class ConferenceApi(remote.Service):
             raise endpoints.NotFoundException(
                 'No conference found with key: %s' % request.websafeConferenceKey)
 
+        speaker = ndb.Key(urlsafe=request.speaker).get()
+        if not speaker:
+            raise endpoints.NotFoundException(
+                'No speaker found with key: %s' % request.speaker)
+
         if user_id != conf.organizerUserId:
             raise endpoints.ForbiddenException(
                 'Only the owner can update the conference.')
@@ -692,6 +697,7 @@ class ConferenceApi(remote.Service):
         new_session_id = Session.allocate_ids(size=1, parent=conf_key)[0]
         session_key = ndb.Key(Session, new_session_id, parent=conf_key)
         data['key'] = session_key
+        data['speaker'] = ndb.Key(urlsafe=request.speaker)
         #return_object = self._copySessionToForm(data)
         Session(**data).put()
 
