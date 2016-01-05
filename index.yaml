@@ -24,3 +24,9 @@ indexes:
   properties:
   - name: typeOfSession
   - name: startTime
+
+- kind: Session
+  ancestor: yes
+  properties:
+  - name: speaker
+  - name: sessionName

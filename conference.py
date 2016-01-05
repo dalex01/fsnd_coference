@@ -598,7 +598,7 @@ class ConferenceApi(remote.Service):
         sf = SessionForm()
         for field in sf.all_fields():
             if hasattr(sess, field.name):
-                # convert Date/Time to date/time string; just copy others
+                # convert Date/Time/Speaker to date/time/speaker string; just copy others
                 if field.name == "date" or field.name == "startTime" or field.name == "speaker":
                     setattr(sf, field.name, str(getattr(sess, field.name)))
                 else:
@@ -646,7 +646,6 @@ class ConferenceApi(remote.Service):
             http_method='GET', name='getConferenceSessionsBySpeaker')
     def getConferenceSessionsBySpeaker(self, request):
         """Given speaker, return all sessions."""
-        # get Conference object from request; bail if not found
         sessions = Session.query()
         sessions = sessions.filter(Session.speaker == ndb.Key(urlsafe=request.speaker))
 
@@ -693,14 +692,25 @@ class ConferenceApi(remote.Service):
             data['startTime'] = datetime.datetime.strptime(data['startTime'], '%H:%M:%S').time()
         del data['websafeConferenceKey']
 
-        #conf_key = ndb.Key(Conference, request.websafeConferenceKey)
+        # Create Session key
         conf_key = ndb.Key(urlsafe=request.websafeConferenceKey)
         new_session_id = Session.allocate_ids(size=1, parent=conf_key)[0]
         session_key = ndb.Key(Session, new_session_id, parent=conf_key)
         data['key'] = session_key
-        data['speaker'] = ndb.Key(urlsafe=request.speaker)
-        #return_object = self._copySessionToForm(data)
+        # Get Speaker key
+        speaker_key = ndb.Key(urlsafe=request.speaker)
+        data['speaker'] = speaker_key
+        # Put session into datastore
         Session(**data).put()
+        # Add created session to speakers sessions
+        self._addToSpeakersSessions(session_key, speaker_key)
+
+        taskqueue.add(params={'speaker_key': request.speaker,
+                              'conf_key': request.websafeConferenceKey
+                              },
+                      url='/tasks/set_featured_speaker',
+                      method='GET'
+                     )
 
         return self._copySessionToForm(request)
 
@@ -767,7 +777,7 @@ class ConferenceApi(remote.Service):
         sess_keys = [ndb.Key(urlsafe=wsck) for wsck in prof.sessionsWishlist]
         sessions = ndb.get_multi(sess_keys)
 
-        # return set of ConferenceForm objects per Conference
+        # return set of SessionForm objects per Session
         return SessionForms(items=[self._copySessionToForm(sess) for sess in sessions]
         )
 
@@ -822,10 +832,9 @@ class ConferenceApi(remote.Service):
                 http_method='GET',
                 name='queryBefore7pmNotWorkshops')
     def queryBefore7pmNotWorkshops(self, request):
-        """Query for sessions with duration more than 60."""
+        """Query for sessions with type other than Workshop and start time before 19:00:00."""
         sessions = Session.query()
         sessions = sessions.order(Session.startTime)
-        #sessions = sessions.order(Session.typeOfSession)
         sessions = sessions.filter(Session.typeOfSession.IN(['Lecture', 'Keynote']))
         sessions = sessions.filter(Session.startTime < datetime.time(hour=19))
 
@@ -834,6 +843,47 @@ class ConferenceApi(remote.Service):
     ######################################
     # Speaker
     ######################################
+
+    def _addToSpeakersSessions(self, wsck, speakerKey, add=True):
+        """Add or delete session to speakers sessions list."""
+        retval = None
+
+        # check if session exists given sessionKey
+        # get sessions; check that it exists
+        sess = wsck.get()
+        speaker = speakerKey.get()
+        if not sess:
+            raise endpoints.NotFoundException(
+                'No session found with key: %s' % wsck)
+        if not speaker:
+            raise endpoints.NotFoundException(
+                'No speaker found with key: %s' % speakerKey)
+
+        # add
+        if add:
+            # check if session already added otherwise add
+            if wsck in speaker.speakersSessions:
+                raise ConflictException(
+                    "This session is already in speakers list")
+
+            # add session
+            speaker.speakersSessions.append(wsck)
+            retval = True
+
+        # delete
+        else:
+            # check if session in speakers sessions list
+            if wsck in speaker.speakersSessions:
+
+                # delete session from list
+                speaker.speakersSessions.remove(wsck)
+                retval = True
+            else:
+                retval = False
+
+        # write things back to the datastore & return
+        speaker.put()
+        return BooleanMessage(data=retval)
 
     def _copySpeakerProfileToForm(self, speaker):
         """Copy relevant fields from Speaker to SpeakerForm."""
@@ -874,37 +924,39 @@ class ConferenceApi(remote.Service):
     ######################################
 
     @staticmethod
-    def _cacheAnnouncement():
-        """Create Announcement & assign to memcache; used by
-        memcache cron job & putAnnouncement().
+    def _cacheFeaturedSpeaker(c_key, s_key):
         """
-        confs = Conference.query(ndb.AND(
-            Conference.seatsAvailable <= 5,
-            Conference.seatsAvailable > 0)
-        ).fetch(projection=[Conference.name])
+        Set Featured Speaker to memcache; used by featured speaker task.
+        """
+        speaker_key = ndb.Key(urlsafe=s_key).get().key
+        conf_key = ndb.Key(urlsafe=c_key).get().key
 
-        if confs:
-            # If there are almost sold out conferences,
-            # format announcement and set it in memcache
-            announcement = '%s %s' % (
-                'Last chance to attend! The following conferences '
-                'are nearly sold out:',
-                ', '.join(conf.name for conf in confs))
-            memcache.set(MEMCACHE_ANNOUNCEMENTS_KEY, announcement)
+        sessionsWithCurrentSpeaker = Session.query(ancestor=conf_key). \
+            filter(Session.speaker == speaker_key). \
+            fetch(projection=[Session.sessionName])
+
+
+        if (len(sessionsWithCurrentSpeaker) > 1):
+            speakerName = ndb.Key(urlsafe=s_key).get().displayName
+            featuredspeaker = '%s %s %s' % (
+                speakerName,
+                'is featured speaker with session:',
+                ', '.join(session.sessionName for sessions in sessionsWithCurrentSpeaker))
+            memcache.set(MEMCACHE_SPEAKER_KEY, featuredspeaker)
         else:
-            # If there are no sold out conferences,
-            # delete the memcache announcements entry
-            announcement = ""
-            memcache.delete(MEMCACHE_ANNOUNCEMENTS_KEY)
+            # If there are no featured speakers,
+            # delete the featured speaker memcache entry
+            featuredspeaker = ""
+            memcache.delete(MEMCACHE_SPEAKER_KEY)
 
-        return announcement
+        return featuredspeaker
 
 
     @endpoints.method(message_types.VoidMessage, StringMessage,
             path='sessions/featured_speakers',
             http_method='GET', name='getFeaturedSpeaker')
     def getFeaturedSpeaker(self, request):
-        """Return Announcement from memcache."""
+        """Return featured speaker from memcache."""
         fspeaker = memcache.get(MEMCACHE_SPEAKER_KEY)
         if not fspeaker:
             fspeaker = ""

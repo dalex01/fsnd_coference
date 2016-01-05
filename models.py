@@ -145,7 +145,7 @@ class Speaker(ndb.Model):
     """Speaker -- speaker profile object"""
     displayName = ndb.StringProperty()
     mainEmail = ndb.StringProperty()
-    speakersSessions = ndb.StringProperty(repeated=True)
+    speakersSessions = ndb.KeyProperty(kind='Session', repeated=True)
 
 class SpeakerForm(messages.Message):
     """SeakerForm -- Speaker outbound form message"""
