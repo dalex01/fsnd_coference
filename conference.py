@@ -602,8 +602,6 @@ class ConferenceApi(remote.Service):
                 # convert Date/Time/Speaker to date/time/speaker string; just copy others
                 if field.name == "date" or field.name == "startTime":
                     setattr(sf, field.name, str(getattr(sess, field.name)))
-                elif field.name ==  'speaker':
-                    setattr(sf, field.name, sess.speaker.urlsafe())
                 else:
                     setattr(sf, field.name, getattr(sess, field.name))
             elif field.name == "websafeKey":
@@ -698,6 +696,7 @@ class ConferenceApi(remote.Service):
         if data['date']:
             data['startTime'] = datetime.datetime.strptime(data['startTime'], '%H:%M').time()
         del data['websafeKey']
+        del data['websafeConferenceKey']
 
         # Create Session key
         conf_key = ndb.Key(urlsafe=request.websafeConferenceKey)
@@ -708,10 +707,9 @@ class ConferenceApi(remote.Service):
         speaker_key = speaker.key
         data['speaker'] = speaker_key
         # Put session into datastore
-        print data
         Session(**data).put()
         # Add created session to speakers sessions
-        speaker.speakersSessions.append(wsck)
+        speaker.speakersSessions.append(session_key)
         speaker.put()
 
         taskqueue.add(params={'speaker_key': request.speaker,
