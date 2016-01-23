@@ -638,6 +638,8 @@ class ConferenceApi(remote.Service):
         confKey = ndb.Key(urlsafe=request.websafeConferenceKey).get()
         if not confKey:
             raise endpoints.NotFoundException('No conference found with key: %s' % request.websafeConferenceKey)
+        if request.sessionType not in SessionTypes:
+            raise endpoints.NotFoundException('There is no such session type: %s' % request.sessionType)
         conf_key = ndb.Key(urlsafe=request.websafeConferenceKey)
         sessions = Session.query(ancestor=conf_key)
         sessions = sessions.filter(Session.typeOfSession == request.sessionType)
@@ -757,7 +759,7 @@ class ConferenceApi(remote.Service):
         # add
         if add:
             # check if user already added otherwise add
-            if wssk in prof.sessionsWishlist:
+            if sess.key in prof.sessionsWishlist:
                 raise ConflictException(
                     "You have already added this session to wishlist")
 
@@ -768,7 +770,7 @@ class ConferenceApi(remote.Service):
         # delete
         else:
             # check if session in users wishlist
-            if wssk in prof.sessionsWishlist:
+            if sess.key in prof.sessionsWishlist:
 
                 # delete session from wishlist
                 prof.sessionsWishlist.remove(sess.key)

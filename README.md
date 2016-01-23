@@ -45,7 +45,6 @@ To support Sessions and Speakers the following was implemented:
   - `Speaker` model with properties:
     - `displayName` - name of Speaker (string property)
     - `mainEmail` - email of Speaker (string property)
-    - `speakersSessions` - Sessions that Speaker is going to tell (repeated key property)
 2. Messages
   - `SessionForm` - update Session form message
   - `SessionForms` - multiple Session outbound form message
@@ -60,7 +59,6 @@ To support Sessions and Speakers the following was implemented:
 4. Helpers
   - `_copySessionToForm` - copy relevant fields from Session to SessionForm
   - `_createSessionObject` - create Session object, returning SessionForm/request
-  - `_addToSpeakersSessions` - add or delete session to speakers sessions list
   - `_copySpeakerProfileToForm` - copy relevant fields from Speaker to SpeakerForm
 
 Each Conference can contain several Sessions. Ancestor relationship was used to model this relation. Sessions unique key is created using Conference key. So particular Conference is a parent for particular set of Sessions.
