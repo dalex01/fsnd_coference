@@ -12,7 +12,6 @@ created by wesc on 2014 apr 21
 
 __author__ = 'wesc+api@google.com (Wesley Chun)'
 
-
 import datetime
 import json
 import os
@@ -750,7 +749,7 @@ class ConferenceApi(remote.Service):
         # check if session exists given sessionKey
         # get sessions; check that it exists
         wssk = request.sessionKey
-        sess = ndb.Key(urlsafe=wsck).get()
+        sess = ndb.Key(urlsafe=wssk).get()
         if not sess:
             raise endpoints.NotFoundException(
                 'No session found with key: %s' % wssk)
@@ -784,14 +783,13 @@ class ConferenceApi(remote.Service):
 
 
     @endpoints.method(message_types.VoidMessage, SessionForms,
-            path='profile/wishlist/',
+            path='profile/wishlist',
             http_method='GET', name='getSessionsInWishlist')
     def getSessionsInWishlist(self, request):
         """Get list of sessions that user has added to wishlist."""
         prof = self._getProfileFromUser() # get user Profile
-        session_keys = prof.sessionKeysToWishlist
-        sessions = [session_key.get() for session_key in session_keys]
-        #sessions = ndb.get_multi(prof.sessionsWishlist)
+        session_keys = prof.sessionsWishlist
+        sessions = ndb.get_multi(session_keys)
 
         # return set of SessionForm objects per Session
         return SessionForms(items=[self._copySessionToForm(sess) for sess in sessions])
