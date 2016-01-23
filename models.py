@@ -25,7 +25,7 @@ class Profile(ndb.Model):
     mainEmail = ndb.StringProperty()
     teeShirtSize = ndb.StringProperty(default='NOT_SPECIFIED')
     conferenceKeysToAttend = ndb.StringProperty(repeated=True)
-    sessionsWishlist = ndb.StringProperty(repeated=True)
+    sessionsWishlist = ndb.KeyProperty(kind='Session', repeated=True)
 
 
 class ProfileMiniForm(messages.Message):
@@ -121,9 +121,16 @@ class Session(ndb.Model):
     highlights      = ndb.StringProperty()
     speaker         = ndb.KeyProperty(kind='Speaker', required=True)
     duration        = ndb.IntegerProperty()
-    typeOfSession   = ndb.StringProperty()
+    typeOfSession   = ndb.StringProperty(default='LECTURE')
     date            = ndb.DateProperty()
     startTime       = ndb.TimeProperty()
+
+
+class SessionTypes(messages.Enum):
+    """SessionTypes -- sessions type enumeration value"""
+    LECTURE = 1
+    WORKSHOP = 2
+    KEYNOTE = 3
 
 
 class SessionForm(messages.Message):
@@ -132,7 +139,7 @@ class SessionForm(messages.Message):
     highlights              = messages.StringField(2)
     speaker                 = messages.StringField(3)
     duration                = messages.IntegerField(4)
-    typeOfSession           = messages.StringField(5)
+    typeOfSession           = messages.EnumField('SessionTypes', 5)
     date                    = messages.StringField(6)
     startTime               = messages.StringField(7)
     websafeKey              = messages.StringField(8)
@@ -145,7 +152,7 @@ class Speaker(ndb.Model):
     """Speaker -- speaker profile object"""
     displayName = ndb.StringProperty()
     mainEmail = ndb.StringProperty()
-    speakersSessions = ndb.KeyProperty(kind='Session', repeated=True)
+    #speakersSessions = ndb.KeyProperty(kind='Session', repeated=True)
 
 class SpeakerForm(messages.Message):
     """SeakerForm -- Speaker outbound form message"""
